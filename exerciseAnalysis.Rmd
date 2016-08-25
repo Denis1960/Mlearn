@@ -1,0 +1,93 @@
+---
+title: "Exercise form analysis"
+author: "Denis Edwards"
+date: "August 18, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary 
+
+Correctness in form is an important aspect of physical training. The use of wearable devices such as Jawbone Up, Fibit, Nike FuelBand and others conceivably could be used to determine if particular exercises are being executed properly. The purpose of this analysis is to determine if correct and incorrect form can be detected by analyzing the data collected by the wearable devices.
+
+To generate data, six participants participated in a dumbell lifting exercise in five different ways. The five ways, as described in the study, were "exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes."
+
+
+##Question driving the analysis
+Correctness in form is the primary question identified for this analysis along with the expected sample error of the data used in the analysis.
+
+##Input and processing of data
+Data for this analysis was provided by the coursera course website. In addition to providing access to the full data set, a preloaded training and testing set were also provided. Please refer to the R file exerciseAnalyis.R to view the steps taken to load and prep the data. At a high level, once loaded, the data was modified to remove rows with NA or missing informatio. Finally, given the size of the training set, it was split into two sets using a 70/30 split to make processing faster and to provide a second training set.
+```{r pressure}
+rm(list = ls())
+#load the libraries that may be needed
+library(AppliedPredictiveModeling)
+library(caret)
+library(rattle)
+library(rpart.plot)
+library(randomForest)
+
+#load the data
+setwd('c:/users/dedward2/desktop/github/mlearn')
+fPath <- getwd()
+trainPath <- paste(fPath,'pml-training.csv',sep='/')
+testPath <-  paste(fPath,'pml-testing.csv',sep='/')
+
+
+dfTest  <- read.csv(testPath,na.strings=c("NA",""),header = TRUE)
+dfTrain <- read.csv(trainPath,na.strings=c("NA",""),header = TRUE)
+
+#Prepare the data
+#1. Remove NAs
+#2. Remove columns that are not relevant to analysis- also remove id and user name
+
+cols <- names(dfTest[,colSums(is.na(dfTest))== 0])[8:59]
+dfTrain<- dfTrain[,c(cols,"classe")]
+dfTest <- dfTest[,c(cols,"problem_id")]
+
+#Further partition training set to create an extra training set
+dfTrain1 <- createDataPartition(dfTrain$classe, p = 0.7, list = F)
+training = dfTrain[dfTrain1,]
+testing =  dfTrain[-dfTrain1,]
+```
+Prior to removing near zero values, the training set is evaluated to determined if this is necessary
+```{r pressure2}
+nzv <- nearZeroVar(training)
+print(nzv)
+```
+Based on the outcome of the near zero value test, further processing is not needed.
+
+##Algorithms
+The alogritm chosen for analysis is Random Forests.This model was chosen based on information gained in the course and based on research conducted on ease of use and accuracy. Cross validation was used to prevent overfitting, even though some research indicates this step is not necessary due to the inherent subsampling in the algorithm. No preprocessing options were included as this step is not needed as Random Forest is not a parameter driven model.
+
+##Evaluation
+First a fit model was developed using the training partition of the dataset. This resulted in an OOB estimate error rate of .72%. The next step in the process was to apply the model to the testing data set created previously (not to be confused with the final test set), followd by the use of confusionMatrix() to determine the out of sample error estimate. The initial model fit revealed an accuracy rate of 99%. This would result in a 1% expected sample error. Given this level of accuracy preprocessing and other models were not utilized. The actual testing set was then used with the fit model, which resulted in the output below. One downside to the Random Forest algoritm is processing speed which is relatively slow compared to other algorithms.
+```{r pressure1}
+#Fit a model using random forest with cross validation
+fitParams <- trainControl(method='cv',number=4)
+set.seed(1234)
+modelFit <- train(classe ~ .,data=training,method='rf',trControl=fitParams)
+print(modelFit$finalModel)
+
+#Use the 30% partition of the original training data set and apply the model
+preds <- predict(modelFit, newdata=testing)
+# show confusion matrix to get estimate of out-of-sample error
+matrix <- confusionMatrix(testing$classe, preds)
+print(matrix)
+```
+
+## Test data set output
+Test data set output is generated predicting the model fit using the 20 sample test file.
+
+```{r pressure3}
+preds <- predict(modelFit,newdata=dfTest)
+n = length(preds)
+for (i in 1:n)
+{
+  print(paste0("ProblemId ",i,"  Result ", preds[i]))
+}
+```
+
